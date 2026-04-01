@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0B0F16" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PestApp" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>PestApp</title>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <img src="icons/icon-192.png" alt="PestApp" />
+        <div>
+          <h1>PestApp</h1>
+          <p>Spokojny porządek w notatkach</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <input id="search" type="search" placeholder="Szukaj…" />
+        <button id="calendar-toggle" class="ghost">Kalendarz</button>
+      </div>
+    </header>
+
+    <div class="owner-tabs" id="owner-tabs"></div>
+
+    <section class="controls">
+      <div class="input-row">
+        <input id="new-note" type="text" placeholder="Dodaj notatkę… (np. 16.03 raport lub !pilne)" />
+        <button id="add-note" class="primary">Dodaj</button>
+      </div>
+      <div class="filters">
+        <div class="filter-left">
+          <label>Filtr</label>
+          <select id="filter">
+            <option value="all">Wszystkie</option>
+            <option value="today">Dzisiaj</option>
+            <option value="week">Tydzień</option>
+            <option value="month">Miesiąc</option>
+            <option value="date">Data</option>
+          </select>
+          <input id="filter-date" type="date" />
+          <input id="filter-month" type="month" />
+        </div>
+        <div class="tab-row" id="list-tabs"></div>
+      </div>
+    </section>
+
+    <div class="main">
+      <section class="notes">
+        <div class="select-all" id="select-all-row"></div>
+        <div class="bulk-actions" id="bulk-actions"></div>
+        <div id="notes-list"></div>
+        <div id="empty" class="empty"></div>
+      </section>
+
+      <aside class="calendar-panel" id="calendar-panel"></aside>
+    </div>
+  </div>
+
+  <dialog id="calendar-dialog" class="calendar-dialog">
+    <div class="calendar-dialog-header">
+      <h3>Kalendarz</h3>
+      <button id="close-calendar" class="ghost">Zamknij</button>
+    </div>
+    <div id="calendar-modal-body"></div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
