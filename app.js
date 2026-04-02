@@ -1,5 +1,21 @@
 const STORAGE_KEY = "pestapp-notes-v1";
 const PREFS_KEY = "pestapp-prefs-v1";
+const EMAIL_KEY = "pestapp-email-link";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAed1v1mqgM1YYtdVsf5y44ULHpDDbYKis",
+  authDomain: "pestapps.firebaseapp.com",
+  projectId: "pestapps",
+  storageBucket: "pestapps.firebasestorage.app",
+  messagingSenderId: "406062964826",
+  appId: "1:406062964826:web:b88fe02ba2c3c31b887863",
+  measurementId: "G-2S3J0F46KC"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 
 const owners = [
   { id: "bunia", label: "Bunia" },
@@ -23,7 +39,11 @@ const state = {
   filterMonth: monthISO(new Date()),
   search: "",
   selection: new Set(),
-  calendarMonth: startOfMonth(new Date())
+  calendarMonth: startOfMonth(new Date()),
+  user: null,
+  masterKey: null,
+  encryptionSalt: null,
+  unsubNotes: null
 };
 
 const els = {
@@ -43,7 +63,11 @@ const els = {
   calendarToggle: document.getElementById("calendar-toggle"),
   calendarDialog: document.getElementById("calendar-dialog"),
   calendarModalBody: document.getElementById("calendar-modal-body"),
-  closeCalendar: document.getElementById("close-calendar")
+  closeCalendar: document.getElementById("close-calendar"),
+  authEmail: document.getElementById("auth-email"),
+  sendLink: document.getElementById("send-link"),
+  signOut: document.getElementById("sign-out"),
+  authStatus: document.getElementById("auth-status")
 };
 
 init();
@@ -52,8 +76,10 @@ function init() {
   loadState();
   purgeTrash();
   bindEvents();
+  bindAuth();
   render();
   registerServiceWorker();
+  handleEmailLinkSignIn();
 }
 
 function bindEvents() {
@@ -110,6 +136,38 @@ function bindEvents() {
   els.closeCalendar.addEventListener("click", () => els.calendarDialog.close());
 }
 
+function bindAuth() {
+  els.sendLink.addEventListener("click", sendMagicLink);
+  els.signOut.addEventListener("click", async () => {
+    await auth.signOut();
+    state.user = null;
+    state.masterKey = null;
+    state.encryptionSalt = null;
+    unsubscribeNotes();
+    const stored = localStorage.getItem(STORAGE_KEY);
+    state.notes = stored ? JSON.parse(stored) : [];
+    updateAuthUI();
+    render();
+  });
+
+  auth.onAuthStateChanged(async (user) => {
+    state.user = user || null;
+    updateAuthUI();
+    if (user) {
+      try {
+        await ensureEncryptionKey();
+        await subscribeNotes();
+      } catch (err) {
+        console.error(err);
+        alert("Nie udało się uruchomić szyfrowania. Spróbuj ponownie.");
+      }
+    } else {
+      unsubscribeNotes();
+    }
+    render();
+  });
+}
+
 function loadState() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored) {
@@ -136,7 +194,9 @@ function loadState() {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.notes));
+  if (!state.user) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.notes));
+  }
   const prefs = {
     selectedOwner: state.selectedOwner,
     selectedTab: state.selectedTab,
@@ -157,6 +217,174 @@ function purgeTrash() {
     return now - new Date(note.deletedAt).getTime() <= monthMs;
   });
   saveState();
+}
+
+async function handleEmailLinkSignIn() {
+  if (!auth.isSignInWithEmailLink(window.location.href)) return;
+  let email = localStorage.getItem(EMAIL_KEY);
+  if (!email) {
+    email = prompt("Podaj adres e-mail użyty do logowania:");
+  }
+  if (!email) return;
+  try {
+    await auth.signInWithEmailLink(email, window.location.href);
+    localStorage.removeItem(EMAIL_KEY);
+    window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+  } catch (err) {
+    alert("Nie udało się zalogować linkiem. Spróbuj ponownie.");
+  }
+}
+
+async function sendMagicLink() {
+  const email = (els.authEmail.value || "").trim();
+  if (!email) {
+    alert("Wpisz e-mail.");
+    return;
+  }
+  const actionCodeSettings = {
+    url: window.location.origin + window.location.pathname,
+    handleCodeInApp: true
+  };
+  try {
+    await auth.sendSignInLinkToEmail(email, actionCodeSettings);
+    localStorage.setItem(EMAIL_KEY, email);
+    els.authStatus.textContent = "Link wysłany. Sprawdź e-mail.";
+  } catch (err) {
+    console.error(err);
+    alert("Nie udało się wysłać linku. Spróbuj ponownie.");
+  }
+}
+
+function updateAuthUI() {
+  const user = state.user;
+  if (user) {
+    els.authEmail.value = user.email || "";
+    els.authEmail.disabled = true;
+    els.sendLink.disabled = true;
+    els.signOut.disabled = false;
+    els.authStatus.textContent = `Zalogowana jako: ${user.email || "użytkownik"}`;
+  } else {
+    els.authEmail.disabled = false;
+    els.sendLink.disabled = false;
+    els.signOut.disabled = true;
+    els.authStatus.textContent = "Zaloguj się, aby włączyć synchronizację.";
+  }
+}
+
+async function ensureEncryptionKey() {
+  if (!state.user) return;
+  const ref = db.collection("users").doc(state.user.uid).collection("meta").doc("encryption");
+  const snap = await ref.get();
+  if (!snap.exists) {
+    const password = await promptForPassword("Ustaw hasło szyfrujące dla notatek:");
+    if (!password) throw new Error("Brak hasła");
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await deriveKey(password, salt);
+    const verifier = await encryptString("PestApp", key);
+    await ref.set({
+      salt: toBase64(salt),
+      verifier,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    state.masterKey = key;
+    state.encryptionSalt = salt;
+    return;
+  }
+
+  const data = snap.data();
+  const salt = fromBase64(data.salt);
+  state.encryptionSalt = salt;
+  while (true) {
+    const password = await promptForPassword("Wpisz hasło szyfrujące:");
+    if (!password) throw new Error("Brak hasła");
+    const key = await deriveKey(password, salt);
+    try {
+      const text = await decryptString(data.verifier.data, data.verifier.iv, key);
+      if (text !== "PestApp") throw new Error("Błędny tekst");
+      state.masterKey = key;
+      return;
+    } catch {
+      alert("Błędne hasło. Spróbuj ponownie.");
+    }
+  }
+}
+
+async function subscribeNotes() {
+  if (!state.user) return;
+  unsubscribeNotes();
+  const ref = db.collection("users").doc(state.user.uid).collection("notes");
+
+  state.unsubNotes = ref.onSnapshot(async (snapshot) => {
+    if (!state.masterKey) return;
+    const decrypted = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        try {
+          return await decryptNote(doc);
+        } catch (err) {
+          console.error(err);
+          return null;
+        }
+      })
+    );
+    const remoteNotes = decrypted.filter(Boolean);
+
+    if (snapshot.empty && state.notes.length > 0) {
+      await Promise.all(state.notes.map((note) => pushNoteRemote(note)));
+    }
+
+    state.notes = mergeNotes(state.notes, remoteNotes);
+    render();
+  });
+}
+
+function unsubscribeNotes() {
+  if (state.unsubNotes) {
+    state.unsubNotes();
+    state.unsubNotes = null;
+  }
+}
+
+async function pushNoteRemote(note) {
+  if (!state.user || !state.masterKey) return;
+  const encrypted = await encryptString(JSON.stringify(note), state.masterKey);
+  const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(note.id);
+  await ref.set(
+    {
+      iv: encrypted.iv,
+      data: encrypted.data,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    },
+    { merge: true }
+  );
+}
+
+function queueNoteSync(note) {
+  if (!state.user || !state.masterKey) return;
+  pushNoteRemote(note).catch((err) => console.error(err));
+}
+
+async function deleteNoteRemote(noteId) {
+  if (!state.user) return;
+  const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(noteId);
+  await ref.delete();
+}
+
+function queueDeleteSync(noteId) {
+  if (!state.user) return;
+  deleteNoteRemote(noteId).catch((err) => console.error(err));
+}
+
+async function decryptNote(doc) {
+  const payload = doc.data();
+  const plain = await decryptString(payload.data, payload.iv, state.masterKey);
+  const note = JSON.parse(plain);
+  if (!note.id) note.id = doc.id;
+  if (!note.owner) note.owner = "bunia";
+  return note;
+}
+
+async function promptForPassword(message) {
+  return prompt(message);
 }
 
 function addFromInput() {
@@ -180,11 +408,13 @@ function addFromInput() {
 
   state.notes.unshift(note);
   els.newNote.value = "";
+  queueNoteSync(note);
   saveState();
   render();
 }
 
 function render() {
+  updateAuthUI();
   renderOwners();
   renderTabs();
   renderFilters();
@@ -332,28 +562,34 @@ function handleBulkAction(action, notes) {
       case "bulk-done":
         note.isDone = true;
         note.updatedAt = new Date().toISOString();
+        queueNoteSync(note);
         break;
       case "bulk-urgent":
         note.isUrgent = true;
         note.updatedAt = new Date().toISOString();
+        queueNoteSync(note);
         break;
       case "bulk-unurgent":
         note.isUrgent = false;
         note.updatedAt = new Date().toISOString();
+        queueNoteSync(note);
         break;
       case "bulk-trash":
         note.isDeleted = true;
         note.deletedAt = new Date().toISOString();
         note.updatedAt = new Date().toISOString();
+        queueNoteSync(note);
         break;
       case "bulk-restore":
         note.isDeleted = false;
         note.deletedAt = null;
         note.isDone = false;
         note.updatedAt = new Date().toISOString();
+        queueNoteSync(note);
         break;
       case "bulk-delete":
         state.notes = state.notes.filter((n) => n.id !== id);
+        queueDeleteSync(id);
         break;
     }
   });
@@ -374,6 +610,7 @@ function handleNoteClick(e) {
   if (action === "toggle-done") {
     note.isDone = !note.isDone;
     note.updatedAt = new Date().toISOString();
+    queueNoteSync(note);
     clearSelection();
     saveState();
     render();
@@ -382,6 +619,7 @@ function handleNoteClick(e) {
   if (action === "toggle-urgent") {
     note.isUrgent = !note.isUrgent;
     note.updatedAt = new Date().toISOString();
+    queueNoteSync(note);
     saveState();
     render();
   }
@@ -390,6 +628,7 @@ function handleNoteClick(e) {
     note.isDeleted = true;
     note.deletedAt = new Date().toISOString();
     note.updatedAt = new Date().toISOString();
+    queueNoteSync(note);
     clearSelection();
     saveState();
     render();
@@ -400,6 +639,7 @@ function handleNoteClick(e) {
     note.deletedAt = null;
     note.isDone = false;
     note.updatedAt = new Date().toISOString();
+    queueNoteSync(note);
     clearSelection();
     saveState();
     render();
@@ -407,6 +647,7 @@ function handleNoteClick(e) {
 
   if (action === "delete-forever") {
     state.notes = state.notes.filter((n) => n.id !== id);
+    queueDeleteSync(id);
     clearSelection();
     saveState();
     render();
@@ -415,6 +656,7 @@ function handleNoteClick(e) {
   if (action === "clear-date") {
     note.dueDate = null;
     note.updatedAt = new Date().toISOString();
+    queueNoteSync(note);
     saveState();
     render();
   }
@@ -445,6 +687,7 @@ function handleNoteChange(e) {
       note.dueDate = null;
     }
     note.updatedAt = new Date().toISOString();
+    queueNoteSync(note);
     saveState();
     render();
   }
@@ -477,6 +720,7 @@ function handleNoteBlur(e) {
     note.isUrgent = true;
   }
   note.updatedAt = new Date().toISOString();
+  queueNoteSync(note);
   saveState();
   render();
 }
@@ -697,6 +941,72 @@ function escapeHtml(str) {
     const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" };
     return map[char] || char;
   });
+}
+
+function mergeNotes(localNotes, remoteNotes) {
+  const map = new Map();
+  localNotes.forEach((note) => map.set(note.id, note));
+  remoteNotes.forEach((note) => {
+    const existing = map.get(note.id);
+    if (!existing) {
+      map.set(note.id, note);
+      return;
+    }
+    const existingDate = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+    const incomingDate = new Date(note.updatedAt || note.createdAt || 0).getTime();
+    if (incomingDate >= existingDate) {
+      map.set(note.id, note);
+    }
+  });
+  return Array.from(map.values());
+}
+
+function toBase64(buffer) {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  let binary = "";
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  return btoa(binary);
+}
+
+function fromBase64(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function deriveKey(password, salt) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function encryptString(text, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(text);
+  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  return { iv: toBase64(iv), data: toBase64(cipher) };
+}
+
+async function decryptString(data, iv, key) {
+  const decoded = fromBase64(data);
+  const ivBytes = fromBase64(iv);
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, key, decoded);
+  return new TextDecoder().decode(plain);
 }
 
 function registerServiceWorker() {

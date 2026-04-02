@@ -28,6 +28,15 @@
       </div>
     </header>
 
+    <section class="auth-bar" id="auth-bar">
+      <div class="auth-fields">
+        <input id="auth-email" type="email" placeholder="Twój e-mail do synchronizacji" />
+        <button id="send-link" class="ghost">Wyślij link</button>
+        <button id="sign-out" class="ghost">Wyloguj</button>
+      </div>
+      <div id="auth-status" class="auth-status"></div>
+    </section>
+
     <div class="owner-tabs" id="owner-tabs"></div>
 
     <section class="controls">
@@ -72,6 +81,9 @@
     <div id="calendar-modal-body"></div>
   </dialog>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

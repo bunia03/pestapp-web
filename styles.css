@@ -71,6 +71,35 @@ body {
   align-items: center;
 }
 
+.auth-bar {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(20,27,38,0.7);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.auth-fields {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.auth-fields input {
+  min-width: 220px;
+}
+
+.auth-status {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
 input[type="search"],
 input[type="text"],
 input[type="date"],

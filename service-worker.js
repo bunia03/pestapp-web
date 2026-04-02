@@ -5,6 +5,9 @@ const ASSETS = [
   "styles.css",
   "app.js",
   "manifest.json",
+  "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js",
+  "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js",
+  "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js",
   "icons/icon-192.png",
   "icons/icon-512.png"
 ];
