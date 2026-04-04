@@ -41,8 +41,7 @@ const state = {
   selection: new Set(),
   calendarMonth: startOfMonth(new Date()),
   user: null,
-  masterKey: null,
-  encryptionSalt: null,
+  allowedOwners: owners.map((owner) => owner.id),
   unsubNotes: null
 };
 
@@ -141,8 +140,8 @@ function bindAuth() {
   els.signOut.addEventListener("click", async () => {
     await auth.signOut();
     state.user = null;
-    state.masterKey = null;
-    state.encryptionSalt = null;
+    state.allowedOwners = owners.map((owner) => owner.id);
+    state.selectedOwner = state.allowedOwners[0] || "bunia";
     unsubscribeNotes();
     const stored = localStorage.getItem(STORAGE_KEY);
     state.notes = stored ? JSON.parse(stored) : [];
@@ -155,11 +154,11 @@ function bindAuth() {
     updateAuthUI();
     if (user) {
       try {
-        await ensureEncryptionKey();
+        await loadAccessProfile();
         await subscribeNotes();
       } catch (err) {
         console.error(err);
-        alert("Nie udało się uruchomić szyfrowania. Spróbuj ponownie.");
+        alert("Nie udało się uruchomić synchronizacji. Spróbuj ponownie.");
       }
     } else {
       unsubscribeNotes();
@@ -262,7 +261,11 @@ function updateAuthUI() {
     els.authEmail.disabled = true;
     els.sendLink.disabled = true;
     els.signOut.disabled = false;
-    els.authStatus.textContent = `Zalogowana jako: ${user.email || "użytkownik"}`;
+    const allowedLabels = owners
+      .filter((owner) => state.allowedOwners.includes(owner.id))
+      .map((owner) => owner.label)
+      .join(", ");
+    els.authStatus.textContent = `Zalogowana jako: ${user.email || "użytkownik"}${allowedLabels ? ` | Dostęp: ${allowedLabels}` : ""}`;
   } else {
     els.authEmail.disabled = false;
     els.sendLink.disabled = false;
@@ -271,70 +274,66 @@ function updateAuthUI() {
   }
 }
 
-async function ensureEncryptionKey() {
+async function loadAccessProfile() {
   if (!state.user) return;
-  const ref = db.collection("users").doc(state.user.uid).collection("meta").doc("encryption");
-  const snap = await ref.get();
-  if (!snap.exists) {
-    const password = await promptForPassword("Ustaw hasło szyfrujące dla notatek:");
-    if (!password) throw new Error("Brak hasła");
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const key = await deriveKey(password, salt);
-    const verifier = await encryptString("PestApp", key);
-    await ref.set({
-      salt: toBase64(salt),
-      verifier,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    state.masterKey = key;
-    state.encryptionSalt = salt;
-    return;
+
+  const email = (state.user.email || "").trim().toLowerCase();
+  const bootstrapOwners = accessBootstrap(email);
+  let allowed = bootstrapOwners;
+
+  try {
+    const snap = await db.collection("access").doc(email).get();
+    if (snap.exists) {
+      const spaces = Array.isArray(snap.data()?.spaces) ? snap.data().spaces : [];
+      const sanitized = spaces.filter((space) => owners.some((owner) => owner.id === space));
+      if (sanitized.length > 0) {
+        allowed = sanitized;
+      }
+    }
+  } catch (err) {
+    console.error(err);
   }
 
-  const data = snap.data();
-  const salt = fromBase64(data.salt);
-  state.encryptionSalt = salt;
-  while (true) {
-    const password = await promptForPassword("Wpisz hasło szyfrujące:");
-    if (!password) throw new Error("Brak hasła");
-    const key = await deriveKey(password, salt);
-    try {
-      const text = await decryptString(data.verifier.data, data.verifier.iv, key);
-      if (text !== "PestApp") throw new Error("Błędny tekst");
-      state.masterKey = key;
-      return;
-    } catch {
-      alert("Błędne hasło. Spróbuj ponownie.");
-    }
+  state.allowedOwners = allowed.length > 0 ? allowed : owners.map((owner) => owner.id);
+  if (!state.allowedOwners.includes(state.selectedOwner)) {
+    state.selectedOwner = state.allowedOwners[0] || "bunia";
   }
 }
 
 async function subscribeNotes() {
   if (!state.user) return;
   unsubscribeNotes();
-  const ref = db.collection("users").doc(state.user.uid).collection("notes");
+  const remoteBySpace = new Map();
+  const unsubscribers = [];
 
-  state.unsubNotes = ref.onSnapshot(async (snapshot) => {
-    if (!state.masterKey) return;
-    const decrypted = await Promise.all(
-      snapshot.docs.map(async (doc) => {
-        try {
-          return await decryptNote(doc);
-        } catch (err) {
-          console.error(err);
-          return null;
-        }
-      })
-    );
-    const remoteNotes = decrypted.filter(Boolean);
+  state.allowedOwners.forEach((owner) => {
+    const ref = db.collection("spaces").doc(owner).collection("notes");
+    const unsubscribe = ref.onSnapshot(async (snapshot) => {
+      const remoteNotes = snapshot.docs
+        .map((doc) => normalizeRemoteNote(doc))
+        .filter(Boolean);
 
-    if (snapshot.empty && state.notes.length > 0) {
-      await Promise.all(state.notes.map((note) => pushNoteRemote(note)));
-    }
+      remoteBySpace.set(owner, remoteNotes);
 
-    state.notes = mergeNotes(state.notes, remoteNotes);
-    render();
+      const mergedRemote = Array.from(remoteBySpace.values()).flat();
+      const localAllowed = state.notes.filter((note) => state.allowedOwners.includes(note.owner));
+
+      if (snapshot.empty && localAllowed.some((note) => note.owner === owner)) {
+        const pending = localAllowed.filter((note) => note.owner === owner);
+        await Promise.all(pending.map((note) => pushNoteRemote(note)));
+        return;
+      }
+
+      state.notes = mergeNotes(state.notes, mergedRemote);
+      render();
+    });
+
+    unsubscribers.push(unsubscribe);
   });
+
+  state.unsubNotes = () => {
+    unsubscribers.forEach((unsubscribe) => unsubscribe());
+  };
 }
 
 function unsubscribeNotes() {
@@ -345,46 +344,30 @@ function unsubscribeNotes() {
 }
 
 async function pushNoteRemote(note) {
-  if (!state.user || !state.masterKey) return;
-  const encrypted = await encryptString(JSON.stringify(note), state.masterKey);
-  const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(note.id);
+  if (!state.user) return;
+  const ref = db.collection("spaces").doc(note.owner).collection("notes").doc(note.id);
   await ref.set(
-    {
-      iv: encrypted.iv,
-      data: encrypted.data,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    },
+    serializeNote(note),
     { merge: true }
   );
 }
 
 function queueNoteSync(note) {
-  if (!state.user || !state.masterKey) return;
+  if (!state.user) return;
   pushNoteRemote(note).catch((err) => console.error(err));
 }
 
 async function deleteNoteRemote(noteId) {
   if (!state.user) return;
-  const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(noteId);
+  const note = state.notes.find((item) => item.id === noteId);
+  if (!note) return;
+  const ref = db.collection("spaces").doc(note.owner).collection("notes").doc(noteId);
   await ref.delete();
 }
 
 function queueDeleteSync(noteId) {
   if (!state.user) return;
   deleteNoteRemote(noteId).catch((err) => console.error(err));
-}
-
-async function decryptNote(doc) {
-  const payload = doc.data();
-  const plain = await decryptString(payload.data, payload.iv, state.masterKey);
-  const note = JSON.parse(plain);
-  if (!note.id) note.id = doc.id;
-  if (!note.owner) note.owner = "bunia";
-  return note;
-}
-
-async function promptForPassword(message) {
-  return prompt(message);
 }
 
 function addFromInput() {
@@ -426,7 +409,9 @@ function render() {
 
 function renderOwners() {
   els.ownerTabs.innerHTML = "";
-  owners.forEach((owner) => {
+  owners
+    .filter((owner) => state.allowedOwners.includes(owner.id))
+    .forEach((owner) => {
     const btn = document.createElement("button");
     btn.textContent = owner.label;
     btn.className = owner.id === state.selectedOwner ? "active" : "";
@@ -961,54 +946,6 @@ function mergeNotes(localNotes, remoteNotes) {
   return Array.from(map.values());
 }
 
-function toBase64(buffer) {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  let binary = "";
-  bytes.forEach((b) => (binary += String.fromCharCode(b)));
-  return btoa(binary);
-}
-
-function fromBase64(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-async function deriveKey(password, salt) {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(password),
-    { name: "PBKDF2" },
-    false,
-    ["deriveKey"]
-  );
-  return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"]
-  );
-}
-
-async function encryptString(text, key) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encoded = new TextEncoder().encode(text);
-  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
-  return { iv: toBase64(iv), data: toBase64(cipher) };
-}
-
-async function decryptString(data, iv, key) {
-  const decoded = fromBase64(data);
-  const ivBytes = fromBase64(iv);
-  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, key, decoded);
-  return new TextDecoder().decode(plain);
-}
-
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js").catch(() => {});
@@ -1020,4 +957,66 @@ function uid() {
     return window.crypto.randomUUID();
   }
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function accessBootstrap(email) {
+  switch ((email || "").trim().toLowerCase()) {
+    case "ujczak.s@gmail.com":
+      return owners.map((owner) => owner.id);
+    case "michalik.gregory@gmail.com":
+      return ["greg"];
+    case "michalik.zddid@gmail.com":
+      return ["michal"];
+    default:
+      return owners.map((owner) => owner.id);
+  }
+}
+
+function serializeNote(note) {
+  return {
+    text: note.text,
+    createdAt: firebase.firestore.Timestamp.fromDate(new Date(note.createdAt)),
+    updatedAt: firebase.firestore.Timestamp.fromDate(new Date(note.updatedAt)),
+    dueDate: note.dueDate ? firebase.firestore.Timestamp.fromDate(new Date(note.dueDate)) : null,
+    isUrgent: !!note.isUrgent,
+    isPinned: !!note.isPinned,
+    isDone: !!note.isDone,
+    isDeleted: !!note.isDeleted,
+    deletedAt: note.deletedAt ? firebase.firestore.Timestamp.fromDate(new Date(note.deletedAt)) : null,
+    owner: note.owner || "bunia",
+    recurrence: note.recurrence || "none"
+  };
+}
+
+function normalizeRemoteNote(doc) {
+  const payload = doc.data() || {};
+  return {
+    id: doc.id,
+    text: payload.text || "",
+    createdAt: normalizeDate(payload.createdAt) || new Date().toISOString(),
+    updatedAt: normalizeDate(payload.updatedAt) || normalizeDate(payload.createdAt) || new Date().toISOString(),
+    dueDate: normalizeDate(payload.dueDate),
+    isUrgent: !!payload.isUrgent,
+    isPinned: !!payload.isPinned,
+    isDone: !!payload.isDone,
+    isDeleted: !!payload.isDeleted,
+    deletedAt: normalizeDate(payload.deletedAt),
+    owner: payload.owner || doc.ref.parent.parent?.id || "bunia",
+    recurrence: payload.recurrence || "none"
+  };
+}
+
+function normalizeDate(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") {
+    return value.toDate().toISOString();
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  return null;
 }
