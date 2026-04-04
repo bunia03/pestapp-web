@@ -1,6 +1,5 @@
 const STORAGE_KEY = "pestapp-notes-v1";
 const PREFS_KEY = "pestapp-prefs-v1";
-const EMAIL_KEY = "pestapp-email-link";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAed1v1mqgM1YYtdVsf5y44ULHpDDbYKis",
@@ -64,7 +63,9 @@ const els = {
   calendarModalBody: document.getElementById("calendar-modal-body"),
   closeCalendar: document.getElementById("close-calendar"),
   authEmail: document.getElementById("auth-email"),
-  sendLink: document.getElementById("send-link"),
+  authPassword: document.getElementById("auth-password"),
+  signIn: document.getElementById("sign-in"),
+  register: document.getElementById("register"),
   signOut: document.getElementById("sign-out"),
   authStatus: document.getElementById("auth-status")
 };
@@ -78,7 +79,6 @@ function init() {
   bindAuth();
   render();
   registerServiceWorker();
-  handleEmailLinkSignIn();
 }
 
 function bindEvents() {
@@ -136,7 +136,8 @@ function bindEvents() {
 }
 
 function bindAuth() {
-  els.sendLink.addEventListener("click", sendMagicLink);
+  els.signIn.addEventListener("click", signInWithPassword);
+  els.register.addEventListener("click", registerWithPassword);
   els.signOut.addEventListener("click", async () => {
     await auth.signOut();
     state.user = null;
@@ -218,39 +219,33 @@ function purgeTrash() {
   saveState();
 }
 
-async function handleEmailLinkSignIn() {
-  if (!auth.isSignInWithEmailLink(window.location.href)) return;
-  let email = localStorage.getItem(EMAIL_KEY);
-  if (!email) {
-    email = prompt("Podaj adres e-mail użyty do logowania:");
+async function signInWithPassword() {
+  const email = (els.authEmail.value || "").trim();
+  const password = els.authPassword.value || "";
+  if (!email || !password) {
+    alert("Wpisz e-mail i hasło.");
+    return;
   }
-  if (!email) return;
   try {
-    await auth.signInWithEmailLink(email, window.location.href);
-    localStorage.removeItem(EMAIL_KEY);
-    window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+    await auth.signInWithEmailAndPassword(email, password);
   } catch (err) {
-    alert("Nie udało się zalogować linkiem. Spróbuj ponownie.");
+    console.error(err);
+    alert("Nie udało się zalogować hasłem. Sprawdź dane albo ustaw hasło w wersji na Macu.");
   }
 }
 
-async function sendMagicLink() {
+async function registerWithPassword() {
   const email = (els.authEmail.value || "").trim();
-  if (!email) {
-    alert("Wpisz e-mail.");
+  const password = els.authPassword.value || "";
+  if (!email || !password) {
+    alert("Wpisz e-mail i hasło.");
     return;
   }
-  const actionCodeSettings = {
-    url: window.location.origin + window.location.pathname,
-    handleCodeInApp: true
-  };
   try {
-    await auth.sendSignInLinkToEmail(email, actionCodeSettings);
-    localStorage.setItem(EMAIL_KEY, email);
-    els.authStatus.textContent = "Link wysłany. Sprawdź e-mail.";
+    await auth.createUserWithEmailAndPassword(email, password);
   } catch (err) {
     console.error(err);
-    alert("Nie udało się wysłać linku. Spróbuj ponownie.");
+    alert("Nie udało się założyć konta. Jeśli ten e-mail już istnieje, ustaw hasło najpierw w aplikacji na Macu.");
   }
 }
 
@@ -259,7 +254,10 @@ function updateAuthUI() {
   if (user) {
     els.authEmail.value = user.email || "";
     els.authEmail.disabled = true;
-    els.sendLink.disabled = true;
+    els.authPassword.value = "";
+    els.authPassword.disabled = true;
+    els.signIn.disabled = true;
+    els.register.disabled = true;
     els.signOut.disabled = false;
     const allowedLabels = owners
       .filter((owner) => state.allowedOwners.includes(owner.id))
@@ -268,9 +266,11 @@ function updateAuthUI() {
     els.authStatus.textContent = `Zalogowana jako: ${user.email || "użytkownik"}${allowedLabels ? ` | Dostęp: ${allowedLabels}` : ""}`;
   } else {
     els.authEmail.disabled = false;
-    els.sendLink.disabled = false;
+    els.authPassword.disabled = false;
+    els.signIn.disabled = false;
+    els.register.disabled = false;
     els.signOut.disabled = true;
-    els.authStatus.textContent = "Zaloguj się, aby włączyć synchronizację.";
+    els.authStatus.textContent = "Zaloguj się mailem i hasłem, aby włączyć synchronizację.";
   }
 }
 

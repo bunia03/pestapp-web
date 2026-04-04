@@ -94,6 +94,10 @@ body {
   min-width: 220px;
 }
 
+#auth-password {
+  min-width: 160px;
+}
+
 .auth-status {
   color: var(--muted);
   font-size: 12px;
@@ -451,6 +455,16 @@ button.ghost {
 @media (max-width: 600px) {
   #app {
     padding: 16px 12px 24px;
+  }
+  .auth-bar {
+    align-items: flex-start;
+  }
+  .auth-status {
+    text-align: left;
+  }
+  .auth-fields input {
+    min-width: 0;
+    width: 100%;
   }
   .top-actions {
     width: 100%;
