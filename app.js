@@ -66,6 +66,7 @@ const els = {
   authPassword: document.getElementById("auth-password"),
   signIn: document.getElementById("sign-in"),
   register: document.getElementById("register"),
+  resetPassword: document.getElementById("reset-password"),
   signOut: document.getElementById("sign-out"),
   authStatus: document.getElementById("auth-status")
 };
@@ -138,6 +139,7 @@ function bindEvents() {
 function bindAuth() {
   els.signIn.addEventListener("click", signInWithPassword);
   els.register.addEventListener("click", registerWithPassword);
+  els.resetPassword.addEventListener("click", sendPasswordReset);
   els.signOut.addEventListener("click", async () => {
     await auth.signOut();
     state.user = null;
@@ -249,6 +251,21 @@ async function registerWithPassword() {
   }
 }
 
+async function sendPasswordReset() {
+  const email = (els.authEmail.value || "").trim();
+  if (!email) {
+    alert("Wpisz e-mail.");
+    return;
+  }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    alert("Link do zmiany hasła został wysłany na e-mail.");
+  } catch (err) {
+    console.error(err);
+    alert("Nie udało się wysłać resetu hasła.");
+  }
+}
+
 function updateAuthUI() {
   const user = state.user;
   if (user) {
@@ -258,6 +275,7 @@ function updateAuthUI() {
     els.authPassword.disabled = true;
     els.signIn.disabled = true;
     els.register.disabled = true;
+    els.resetPassword.disabled = true;
     els.signOut.disabled = false;
     const allowedLabels = owners
       .filter((owner) => state.allowedOwners.includes(owner.id))
@@ -269,6 +287,7 @@ function updateAuthUI() {
     els.authPassword.disabled = false;
     els.signIn.disabled = false;
     els.register.disabled = false;
+    els.resetPassword.disabled = false;
     els.signOut.disabled = true;
     els.authStatus.textContent = "Zaloguj się mailem i hasłem, aby włączyć synchronizację.";
   }
