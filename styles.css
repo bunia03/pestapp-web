@@ -35,40 +35,57 @@ body {
 
 .topbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.brand {
+.utility-row {
   display: flex;
+  justify-content: flex-end;
+  gap: 10px;
   align-items: center;
-  gap: 12px;
 }
 
-.brand img {
-  width: 44px;
-  height: 44px;
+.icon-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  display: grid;
+  place-items: center;
+  font-size: 18px;
 }
 
-.brand h1 {
-  margin: 0;
-  font-size: 22px;
+.settings-wrap {
+  position: relative;
 }
 
-.brand p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.top-actions {
+.settings-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 170px;
+  padding: 8px;
+  background: rgba(20,27,38,0.98);
+  border: 1px solid var(--border);
+  border-radius: 14px;
   display: flex;
-  gap: 12px;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 20;
+}
+
+.settings-menu button {
+  text-align: left;
+}
+
+.search-row.hidden,
+.settings-menu.hidden {
+  display: none;
+}
+
+.search-row input {
+  width: 100%;
 }
 
 .auth-bar {
@@ -146,7 +163,7 @@ button.ghost {
 .owner-tabs {
   display: flex;
   gap: 8px;
-  margin: 18px 0 12px;
+  margin: 10px 0 12px;
   flex-wrap: wrap;
 }
 
@@ -167,12 +184,15 @@ button.ghost {
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+  display: flex;
+  flex-direction: column;
 }
 
 .input-row {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  order: 2;
 }
 
 .input-row input {
@@ -186,6 +206,7 @@ button.ghost {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+  order: 1;
 }
 
 .filter-left {
@@ -213,10 +234,8 @@ button.ghost {
 }
 
 .main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 18px;
-  margin-top: 18px;
+  display: block;
+  margin-top: 14px;
 }
 
 .notes {
@@ -259,7 +278,7 @@ button.ghost {
   display: grid;
   grid-template-columns: auto auto 1fr auto;
   gap: 10px;
-  align-items: start;
+  align-items: center;
   margin-bottom: 8px;
   background: rgba(15,20,30,0.55);
 }
@@ -292,54 +311,23 @@ button.ghost {
 }
 
 .note-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
 }
 
 .note-text {
-  width: 100%;
-  background: transparent;
-  border: none;
-  color: inherit;
   font-size: 15px;
-  padding: 4px 2px;
-}
-
-.note-text:focus {
-  outline: 1px solid var(--accent);
-  border-radius: 6px;
-}
-
-.note-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.note-meta .due {
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-}
-
-.note-meta .due.overdue {
-  color: var(--overdue);
-  border-color: rgba(198,160,108,0.4);
-}
-
-.note-meta .due.upcoming {
-  color: var(--good);
-  border-color: rgba(136,214,184,0.4);
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .note-actions {
   display: flex;
   gap: 6px;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .note-actions button {
@@ -375,10 +363,7 @@ button.ghost {
 }
 
 .calendar-panel {
-  background: rgba(20,27,38,0.85);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 12px;
+  display: none;
 }
 
 .calendar-header {
@@ -443,10 +428,56 @@ button.ghost {
   padding: 12px 14px 0;
 }
 
+.note-dialog {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  color: var(--text);
+  width: min(420px, 92vw);
+}
+
+.note-dialog::backdrop {
+  background: rgba(0,0,0,0.6);
+}
+
+.note-dialog-body {
+  padding: 12px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.note-dialog-body textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 12px;
+  font: inherit;
+}
+
+.note-dialog-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.dialog-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.signed-in .auth-bar {
+  display: none;
+}
+
 @media (max-width: 900px) {
-  .main {
-    grid-template-columns: 1fr;
-  }
   .calendar-panel {
     display: none;
   }
@@ -466,18 +497,12 @@ button.ghost {
     min-width: 0;
     width: 100%;
   }
-  .top-actions {
-    width: 100%;
-  }
   input[type="search"] {
     flex: 1;
     min-width: unset;
   }
   .note {
-    grid-template-columns: auto auto 1fr;
-  }
-  .note-actions {
-    grid-column: 3 / 4;
-    justify-content: flex-end;
+    grid-template-columns: auto auto 1fr auto;
+    gap: 8px;
   }
 }

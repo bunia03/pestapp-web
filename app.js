@@ -41,7 +41,10 @@ const state = {
   calendarMonth: startOfMonth(new Date()),
   user: null,
   allowedOwners: owners.map((owner) => owner.id),
-  unsubNotes: null
+  unsubNotes: null,
+  searchOpen: false,
+  settingsOpen: false,
+  editingNoteId: null
 };
 
 const els = {
@@ -58,6 +61,11 @@ const els = {
   selectAllRow: document.getElementById("select-all-row"),
   bulkActions: document.getElementById("bulk-actions"),
   calendarPanel: document.getElementById("calendar-panel"),
+  searchToggle: document.getElementById("search-toggle"),
+  searchRow: document.getElementById("search-row"),
+  settingsToggle: document.getElementById("settings-toggle"),
+  settingsMenu: document.getElementById("settings-menu"),
+  refreshData: document.getElementById("refresh-data"),
   calendarToggle: document.getElementById("calendar-toggle"),
   calendarDialog: document.getElementById("calendar-dialog"),
   calendarModalBody: document.getElementById("calendar-modal-body"),
@@ -68,7 +76,15 @@ const els = {
   register: document.getElementById("register"),
   resetPassword: document.getElementById("reset-password"),
   signOut: document.getElementById("sign-out"),
-  authStatus: document.getElementById("auth-status")
+  authStatus: document.getElementById("auth-status"),
+  noteDialog: document.getElementById("note-dialog"),
+  closeNoteDialog: document.getElementById("close-note-dialog"),
+  noteDialogText: document.getElementById("note-dialog-text"),
+  noteDialogDate: document.getElementById("note-dialog-date"),
+  noteDialogUrgent: document.getElementById("note-dialog-urgent"),
+  noteDialogDone: document.getElementById("note-dialog-done"),
+  noteDialogClearDate: document.getElementById("note-dialog-clear-date"),
+  noteDialogSave: document.getElementById("note-dialog-save")
 };
 
 init();
@@ -125,8 +141,23 @@ function bindEvents() {
 
   els.notesList.addEventListener("click", handleNoteClick);
   els.notesList.addEventListener("change", handleNoteChange);
-  els.notesList.addEventListener("keydown", handleNoteKeydown);
-  els.notesList.addEventListener("focusout", handleNoteBlur);
+
+  els.searchToggle.addEventListener("click", () => {
+    state.searchOpen = !state.searchOpen;
+    if (!state.searchOpen) {
+      state.search = "";
+      els.search.value = "";
+    }
+    render();
+    if (state.searchOpen) {
+      setTimeout(() => els.search.focus(), 0);
+    }
+  });
+
+  els.settingsToggle.addEventListener("click", () => {
+    state.settingsOpen = !state.settingsOpen;
+    renderUtilityState();
+  });
 
   els.calendarToggle.addEventListener("click", () => {
     if (typeof els.calendarDialog.showModal === "function") {
@@ -134,6 +165,26 @@ function bindEvents() {
     }
   });
   els.closeCalendar.addEventListener("click", () => els.calendarDialog.close());
+
+  els.closeNoteDialog.addEventListener("click", closeNoteDialog);
+  els.noteDialogClearDate.addEventListener("click", () => {
+    els.noteDialogDate.value = "";
+  });
+  els.noteDialogSave.addEventListener("click", saveNoteDialog);
+  els.refreshData.addEventListener("click", async () => {
+    if (state.user) {
+      await subscribeNotes();
+    }
+    state.settingsOpen = false;
+    render();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".settings-wrap")) {
+      state.settingsOpen = false;
+      renderUtilityState();
+    }
+  });
 }
 
 function bindAuth() {
@@ -275,13 +326,14 @@ function updateAuthUI() {
     els.authPassword.disabled = true;
     els.signIn.disabled = true;
     els.register.disabled = true;
-    els.resetPassword.disabled = true;
+    els.resetPassword.disabled = false;
     els.signOut.disabled = false;
     const allowedLabels = owners
       .filter((owner) => state.allowedOwners.includes(owner.id))
       .map((owner) => owner.label)
       .join(", ");
     els.authStatus.textContent = `Zalogowana jako: ${user.email || "użytkownik"}${allowedLabels ? ` | Dostęp: ${allowedLabels}` : ""}`;
+    document.body.classList.add("signed-in");
   } else {
     els.authEmail.disabled = false;
     els.authPassword.disabled = false;
@@ -290,6 +342,7 @@ function updateAuthUI() {
     els.resetPassword.disabled = false;
     els.signOut.disabled = true;
     els.authStatus.textContent = "Zaloguj się mailem i hasłem, aby włączyć synchronizację.";
+    document.body.classList.remove("signed-in");
   }
 }
 
@@ -417,6 +470,7 @@ function addFromInput() {
 
 function render() {
   updateAuthUI();
+  renderUtilityState();
   renderOwners();
   renderTabs();
   renderFilters();
@@ -424,6 +478,11 @@ function render() {
   renderCalendar(els.calendarPanel, false);
   renderCalendar(els.calendarModalBody, true);
   saveState();
+}
+
+function renderUtilityState() {
+  els.searchRow.classList.toggle("hidden", !state.searchOpen);
+  els.settingsMenu.classList.toggle("hidden", !state.settingsOpen);
 }
 
 function renderOwners() {
@@ -486,19 +545,13 @@ function renderNotes() {
 
     row.innerHTML = `
       <input class="select" data-action="select" type="checkbox" ${state.selection.has(note.id) ? "checked" : ""} />
-      <button class="done-toggle ${note.isDone ? "done" : ""}" data-action="toggle-done">${note.isDone ? "✓" : ""}</button>
-      <div class="note-body">
-        <textarea class="note-text" data-action="edit-text" rows="1">${escapeHtml(note.text)}</textarea>
-        <div class="note-meta">
-          <span class="due ${note.dueDate ? (isOverdue(note) ? "overdue" : "upcoming") : ""}">${note.dueDate ? `Do: ${formatDate(note.dueDate)}` : "Brak daty"}</span>
-          <input class="date-input" data-action="date-input" type="date" value="${note.dueDate ? toDateInput(note.dueDate) : ""}" />
-          <button class="ghost" data-action="clear-date">Usuń datę</button>
-        </div>
+      <button class="done-toggle ${note.isDone ? "done" : ""}" data-action="toggle-done" type="button">${note.isDone ? "✓" : ""}</button>
+      <div class="note-body" data-action="edit-note" role="button" tabindex="0" aria-label="Edytuj notatkę">
+        <div class="note-text">${escapeHtml(note.text)}</div>
       </div>
       <div class="note-actions">
-        <button class="urgent ${note.isUrgent ? "active" : ""}" data-action="toggle-urgent">!</button>
-        ${state.selectedTab === "trash" ? "<button class=\"trash\" data-action=\"delete-forever\">Usuń</button>" : "<button class=\"trash\" data-action=\"trash\">Kosz</button>"}
-        ${state.selectedTab === "trash" ? "<button class=\"ghost\" data-action=\"restore\">Przywróć</button>" : ""}
+        <button class="urgent ${note.isUrgent ? "active" : ""}" data-action="toggle-urgent" type="button">!</button>
+        ${state.selectedTab === "trash" ? "<button class=\"trash\" data-action=\"delete-forever\" type=\"button\">Usuń</button>" : "<button class=\"trash\" data-action=\"trash\" type=\"button\">Kosz</button>"}
       </div>
     `;
 
@@ -620,6 +673,10 @@ function handleNoteClick(e) {
     render();
   }
 
+  if (action === "edit-note") {
+    openNoteDialog(note);
+  }
+
   if (action === "toggle-urgent") {
     note.isUrgent = !note.isUrgent;
     note.updatedAt = new Date().toISOString();
@@ -638,29 +695,10 @@ function handleNoteClick(e) {
     render();
   }
 
-  if (action === "restore") {
-    note.isDeleted = false;
-    note.deletedAt = null;
-    note.isDone = false;
-    note.updatedAt = new Date().toISOString();
-    queueNoteSync(note);
-    clearSelection();
-    saveState();
-    render();
-  }
-
   if (action === "delete-forever") {
     state.notes = state.notes.filter((n) => n.id !== id);
     queueDeleteSync(id);
     clearSelection();
-    saveState();
-    render();
-  }
-
-  if (action === "clear-date") {
-    note.dueDate = null;
-    note.updatedAt = new Date().toISOString();
-    queueNoteSync(note);
     saveState();
     render();
   }
@@ -684,49 +722,6 @@ function handleNoteChange(e) {
     render();
   }
 
-  if (action === "date-input") {
-    if (e.target.value) {
-      note.dueDate = new Date(e.target.value).toISOString();
-    } else {
-      note.dueDate = null;
-    }
-    note.updatedAt = new Date().toISOString();
-    queueNoteSync(note);
-    saveState();
-    render();
-  }
-}
-
-function handleNoteKeydown(e) {
-  if (e.target.dataset.action !== "edit-text") return;
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    e.target.blur();
-  }
-}
-
-function handleNoteBlur(e) {
-  if (e.target.dataset.action !== "edit-text") return;
-  const row = e.target.closest(".note");
-  if (!row) return;
-  const id = row.dataset.id;
-  const note = state.notes.find((n) => n.id === id);
-  if (!note) return;
-
-  const raw = e.target.value.trim();
-  if (!raw) return;
-  const parsed = parseInput(raw);
-  note.text = parsed.text;
-  if (parsed.dueDate) {
-    note.dueDate = parsed.dueDate;
-  }
-  if (parsed.isUrgent) {
-    note.isUrgent = true;
-  }
-  note.updatedAt = new Date().toISOString();
-  queueNoteSync(note);
-  saveState();
-  render();
 }
 
 function getVisibleNotes() {
@@ -861,16 +856,55 @@ function renderCalendar(container, isModal) {
     cell.className = "calendar-cell day" + (isSelected ? " selected" : "") + (isToday ? " today" : "");
     cell.textContent = day;
     cell.onclick = () => {
-      state.filter = "date";
-      state.filterDate = toDateInput(date);
+      const prefix = formatShortDatePrefix(date);
+      const current = els.newNote.value.trim();
+      els.newNote.value = current ? `${prefix} ${stripDatePrefix(current)}` : `${prefix} `;
       state.calendarMonth = startOfMonth(date);
-      render();
       if (isModal) els.calendarDialog.close();
+      els.newNote.focus();
     };
     grid.appendChild(cell);
   }
 
   container.append(header, grid);
+}
+
+function openNoteDialog(note) {
+  state.editingNoteId = note.id;
+  els.noteDialogText.value = note.text || "";
+  els.noteDialogDate.value = note.dueDate ? toDateInput(note.dueDate) : "";
+  els.noteDialogUrgent.checked = !!note.isUrgent;
+  els.noteDialogDone.checked = !!note.isDone;
+  if (typeof els.noteDialog.showModal === "function") {
+    els.noteDialog.showModal();
+  }
+}
+
+function closeNoteDialog() {
+  state.editingNoteId = null;
+  els.noteDialog.close();
+}
+
+function saveNoteDialog() {
+  const note = state.notes.find((item) => item.id === state.editingNoteId);
+  if (!note) return;
+
+  const raw = els.noteDialogText.value.trim();
+  if (!raw) return;
+
+  const parsed = parseInput(raw);
+  note.text = parsed.text;
+  note.isUrgent = els.noteDialogUrgent.checked || parsed.isUrgent;
+  note.isDone = els.noteDialogDone.checked;
+  note.dueDate = els.noteDialogDate.value ? new Date(els.noteDialogDate.value).toISOString() : null;
+  if (parsed.dueDate && !els.noteDialogDate.value) {
+    note.dueDate = parsed.dueDate;
+  }
+  note.updatedAt = new Date().toISOString();
+  queueNoteSync(note);
+  saveState();
+  closeNoteDialog();
+  render();
 }
 
 function parseInput(raw) {
@@ -921,6 +955,14 @@ function isOverdue(note) {
 function formatDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function formatShortDatePrefix(date) {
+  return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function stripDatePrefix(text) {
+  return text.replace(/^\s*\d{1,2}\.\d{1,2}(?:\.\d{4})?\.?\s*/, "").trim();
 }
 
 function toDateInput(isoOrDate) {

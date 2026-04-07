@@ -15,16 +15,20 @@
 <body>
   <div id="app">
     <header class="topbar">
-      <div class="brand">
-        <img src="icons/icon-192.png" alt="PestApp" />
-        <div>
-          <h1>PestApp</h1>
-          <p>Spokojny porządek w notatkach</p>
+      <div class="utility-row">
+        <button id="search-toggle" class="icon-button" aria-label="Szukaj">⌕</button>
+        <button id="calendar-toggle" class="icon-button" aria-label="Kalendarz">▦</button>
+        <div class="settings-wrap">
+          <button id="settings-toggle" class="icon-button" aria-label="Ustawienia">⚙</button>
+          <div id="settings-menu" class="settings-menu hidden">
+            <button id="refresh-data" class="ghost">Odśwież</button>
+            <button id="reset-password" class="ghost">Odzyskaj hasło</button>
+            <button id="sign-out" class="ghost">Wyloguj</button>
+          </div>
         </div>
       </div>
-      <div class="top-actions">
+      <div id="search-row" class="search-row hidden">
         <input id="search" type="search" placeholder="Szukaj…" />
-        <button id="calendar-toggle" class="ghost">Kalendarz</button>
       </div>
     </header>
 
@@ -34,8 +38,6 @@
         <input id="auth-password" type="password" placeholder="Hasło" />
         <button id="sign-in" class="ghost">Zaloguj</button>
         <button id="register" class="ghost">Załóż konto</button>
-        <button id="reset-password" class="ghost">Odzyskaj hasło</button>
-        <button id="sign-out" class="ghost">Wyloguj</button>
       </div>
       <div id="auth-status" class="auth-status"></div>
     </section>
@@ -82,6 +84,33 @@
       <button id="close-calendar" class="ghost">Zamknij</button>
     </div>
     <div id="calendar-modal-body"></div>
+  </dialog>
+
+  <dialog id="note-dialog" class="note-dialog">
+    <div class="calendar-dialog-header">
+      <h3>Edytuj notatkę</h3>
+      <button id="close-note-dialog" class="ghost">Zamknij</button>
+    </div>
+    <div class="note-dialog-body">
+      <textarea id="note-dialog-text" rows="5" placeholder="Treść notatki"></textarea>
+      <div class="note-dialog-row">
+        <label class="dialog-checkbox">
+          <input id="note-dialog-urgent" type="checkbox" />
+          <span>Pilne</span>
+        </label>
+        <label class="dialog-checkbox">
+          <input id="note-dialog-done" type="checkbox" />
+          <span>Done</span>
+        </label>
+      </div>
+      <div class="note-dialog-row">
+        <input id="note-dialog-date" type="date" />
+        <button id="note-dialog-clear-date" class="ghost">Usuń datę</button>
+      </div>
+      <div class="note-dialog-row">
+        <button id="note-dialog-save" class="primary">Zapisz</button>
+      </div>
+    </div>
   </dialog>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
