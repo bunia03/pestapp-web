@@ -90,6 +90,9 @@ const els = {
 init();
 
 function init() {
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch((err) => {
+    console.error("Auth persistence error", err);
+  });
   loadState();
   purgeTrash();
   bindEvents();
