@@ -37,10 +37,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  align-items: stretch;
 }
 
 .utility-row {
   display: flex;
+  width: 100%;
   justify-content: flex-end;
   gap: 10px;
   align-items: center;
@@ -53,7 +55,16 @@ body {
   border-radius: 12px;
   display: grid;
   place-items: center;
-  font-size: 18px;
+}
+
+.icon-button svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--text);
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .settings-wrap {
@@ -73,6 +84,7 @@ body {
   flex-direction: column;
   gap: 6px;
   z-index: 20;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.35);
 }
 
 .settings-menu button {
@@ -193,6 +205,7 @@ button.ghost {
   gap: 12px;
   flex-wrap: wrap;
   order: 2;
+  margin-top: 12px;
 }
 
 .input-row input {
@@ -200,7 +213,7 @@ button.ghost {
 }
 
 .filters {
-  margin-top: 14px;
+  margin-top: 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -316,7 +329,7 @@ button.ghost {
 }
 
 .note-text {
-  font-size: 15px;
+  font-size: clamp(14px, 3.6vw, 16px);
   line-height: 1.35;
   white-space: normal;
   word-break: break-word;

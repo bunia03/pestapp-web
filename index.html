@@ -16,10 +16,25 @@
   <div id="app">
     <header class="topbar">
       <div class="utility-row">
-        <button id="search-toggle" class="icon-button" aria-label="Szukaj">⌕</button>
-        <button id="calendar-toggle" class="icon-button" aria-label="Kalendarz">▦</button>
+        <button id="search-toggle" class="icon-button" aria-label="Szukaj">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5"></circle>
+            <path d="M16 16l5 5"></path>
+          </svg>
+        </button>
+        <button id="calendar-toggle" class="icon-button" aria-label="Kalendarz">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4" y="5" width="16" height="15" rx="2"></rect>
+            <path d="M8 3v4M16 3v4M4 9h16"></path>
+          </svg>
+        </button>
         <div class="settings-wrap">
-          <button id="settings-toggle" class="icon-button" aria-label="Ustawienia">⚙</button>
+          <button id="settings-toggle" class="icon-button" aria-label="Ustawienia">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3l1.2 2.4 2.7.4-.8 2.6 1.8 2-1.8 2 .8 2.6-2.7.4L12 21l-1.2-2.4-2.7-.4.8-2.6-1.8-2 1.8-2-.8-2.6 2.7-.4L12 3z"></path>
+              <circle cx="12" cy="12" r="3.2"></circle>
+            </svg>
+          </button>
           <div id="settings-menu" class="settings-menu hidden">
             <button id="refresh-data" class="ghost">Odśwież</button>
             <button id="reset-password" class="ghost">Odzyskaj hasło</button>
