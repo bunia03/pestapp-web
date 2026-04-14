@@ -19,8 +19,10 @@ db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 const owners = [
   { id: "bunia", label: "Bunia" },
   { id: "greg", label: "Greg" },
-  { id: "office", label: "W biurze" },
-  { id: "michal", label: "Michał" }
+  { id: "michal", label: "Michał" },
+  { id: "secondStages", label: "Drugie etapy" },
+  { id: "billing", label: "Rozliczenie" },
+  { id: "office", label: "W biurze" }
 ];
 
 const tabs = [
@@ -659,7 +661,8 @@ function handleBulkAction(action, notes) {
 }
 
 function handleNoteClick(e) {
-  const action = e.target.dataset.action;
+  const actionTarget = e.target.closest("[data-action]");
+  const action = actionTarget?.dataset.action;
   if (!action) return;
   const row = e.target.closest(".note");
   if (!row) return;
