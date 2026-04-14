@@ -20,9 +20,10 @@ const owners = [
   { id: "bunia", label: "Bunia" },
   { id: "greg", label: "Greg" },
   { id: "michal", label: "Michał" },
+  { id: "office", label: "W biurze" },
   { id: "secondStages", label: "Drugie etapy" },
   { id: "billing", label: "Rozliczenie" },
-  { id: "office", label: "W biurze" }
+  { id: "all", label: "Wszystkie" }
 ];
 
 const tabs = [
@@ -42,7 +43,7 @@ const state = {
   selection: new Set(),
   calendarMonth: startOfMonth(new Date()),
   user: null,
-  allowedOwners: owners.map((owner) => owner.id),
+  allowedOwners: owners.filter((owner) => owner.id !== "all").map((owner) => owner.id),
   unsubNotes: null,
   searchOpen: false,
   settingsOpen: false,
@@ -54,9 +55,6 @@ const els = {
   listTabs: document.getElementById("list-tabs"),
   newNote: document.getElementById("new-note"),
   addNote: document.getElementById("add-note"),
-  filter: document.getElementById("filter"),
-  filterDate: document.getElementById("filter-date"),
-  filterMonth: document.getElementById("filter-month"),
   search: document.getElementById("search"),
   notesList: document.getElementById("notes-list"),
   empty: document.getElementById("empty"),
@@ -68,6 +66,7 @@ const els = {
   settingsToggle: document.getElementById("settings-toggle"),
   settingsMenu: document.getElementById("settings-menu"),
   refreshData: document.getElementById("refresh-data"),
+  exportBackup: document.getElementById("export-backup"),
   calendarToggle: document.getElementById("calendar-toggle"),
   calendarDialog: document.getElementById("calendar-dialog"),
   calendarModalBody: document.getElementById("calendar-modal-body"),
@@ -110,33 +109,6 @@ function bindEvents() {
       e.preventDefault();
       addFromInput();
     }
-  });
-
-  els.filter.addEventListener("change", (e) => {
-    state.filter = e.target.value;
-    if (state.filter === "date") {
-      state.filterDate = state.filterDate || todayISO();
-    }
-    if (state.filter === "month") {
-      state.filterMonth = state.filterMonth || monthISO(new Date());
-    }
-    clearSelection();
-    render();
-  });
-
-  els.filterDate.addEventListener("change", (e) => {
-    state.filterDate = e.target.value;
-    state.filter = "date";
-    state.calendarMonth = startOfMonth(new Date(state.filterDate));
-    render();
-  });
-
-  els.filterMonth.addEventListener("change", (e) => {
-    state.filterMonth = e.target.value;
-    state.filter = "month";
-    const [year, month] = e.target.value.split("-").map(Number);
-    state.calendarMonth = startOfMonth(new Date(year, month - 1, 1));
-    render();
   });
 
   els.search.addEventListener("input", (e) => {
@@ -183,6 +155,11 @@ function bindEvents() {
     state.settingsOpen = false;
     render();
   });
+  els.exportBackup.addEventListener("click", () => {
+    downloadBackup();
+    state.settingsOpen = false;
+    renderUtilityState();
+  });
 
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".settings-wrap")) {
@@ -199,7 +176,7 @@ function bindAuth() {
   els.signOut.addEventListener("click", async () => {
     await auth.signOut();
     state.user = null;
-    state.allowedOwners = owners.map((owner) => owner.id);
+    state.allowedOwners = owners.filter((owner) => owner.id !== "all").map((owner) => owner.id);
     state.selectedOwner = state.allowedOwners[0] || "bunia";
     unsubscribeNotes();
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -248,7 +225,7 @@ function loadState() {
 
   if (!state.filterDate) state.filterDate = todayISO();
   if (!state.filterMonth) state.filterMonth = monthISO(new Date());
-  state.calendarMonth = startOfMonth(new Date(state.filterDate));
+  state.calendarMonth = startOfMonth(new Date());
 }
 
 function saveState() {
@@ -258,9 +235,6 @@ function saveState() {
   const prefs = {
     selectedOwner: state.selectedOwner,
     selectedTab: state.selectedTab,
-    filter: state.filter,
-    filterDate: state.filterDate,
-    filterMonth: state.filterMonth,
     search: state.search
   };
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
@@ -362,7 +336,7 @@ async function loadAccessProfile() {
     const snap = await db.collection("access").doc(email).get();
     if (snap.exists) {
       const spaces = Array.isArray(snap.data()?.spaces) ? snap.data().spaces : [];
-      const sanitized = spaces.filter((space) => owners.some((owner) => owner.id === space));
+      const sanitized = spaces.filter((space) => owners.some((owner) => owner.id === space && owner.id !== "all"));
       if (sanitized.length > 0) {
         allowed = sanitized;
       }
@@ -371,7 +345,7 @@ async function loadAccessProfile() {
     console.error(err);
   }
 
-  state.allowedOwners = allowed.length > 0 ? allowed : owners.map((owner) => owner.id);
+  state.allowedOwners = allowed.length > 0 ? allowed : owners.filter((owner) => owner.id !== "all").map((owner) => owner.id);
   if (!state.allowedOwners.includes(state.selectedOwner)) {
     state.selectedOwner = state.allowedOwners[0] || "bunia";
   }
@@ -493,7 +467,7 @@ function renderUtilityState() {
 function renderOwners() {
   els.ownerTabs.innerHTML = "";
   owners
-    .filter((owner) => state.allowedOwners.includes(owner.id))
+    .filter((owner) => owner.id === "all" || state.allowedOwners.includes(owner.id))
     .forEach((owner) => {
     const btn = document.createElement("button");
     btn.textContent = owner.label;
@@ -523,11 +497,7 @@ function renderTabs() {
 }
 
 function renderFilters() {
-  els.filter.value = state.filter;
-  els.filterDate.style.display = state.filter === "date" ? "inline-flex" : "none";
-  els.filterMonth.style.display = state.filter === "month" ? "inline-flex" : "none";
-  els.filterDate.value = state.filterDate || todayISO();
-  els.filterMonth.value = state.filterMonth || monthISO(new Date());
+  // Filtr zostal usuniety z mobilnego widoku.
 }
 
 function renderNotes() {
@@ -549,14 +519,20 @@ function renderNotes() {
     row.dataset.id = note.id;
 
     row.innerHTML = `
-      <input class="select" data-action="select" type="checkbox" ${state.selection.has(note.id) ? "checked" : ""} />
       <button class="done-toggle ${note.isDone ? "done" : ""}" data-action="toggle-done" type="button">${note.isDone ? "✓" : ""}</button>
       <div class="note-body" data-action="edit-note" role="button" tabindex="0" aria-label="Edytuj notatkę">
         <div class="note-text">${escapeHtml(note.text)}</div>
       </div>
       <div class="note-actions">
-        <button class="urgent ${note.isUrgent ? "active" : ""}" data-action="toggle-urgent" type="button">!</button>
-        ${state.selectedTab === "trash" ? "<button class=\"trash\" data-action=\"delete-forever\" type=\"button\">Usuń</button>" : "<button class=\"trash\" data-action=\"trash\" type=\"button\">Kosz</button>"}
+        <button class="urgent ${note.isUrgent ? "active" : ""}" data-action="toggle-urgent" type="button" aria-label="Pilne">!</button>
+        ${state.selectedTab === "trash"
+          ? `<button class="trash" data-action="delete-forever" type="button" aria-label="Usuń na zawsze">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M8 7l1 12h6l1-12M10 11v5M14 11v5"/></svg>
+            </button>`
+          : `<button class="trash" data-action="trash" type="button" aria-label="Kosz">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M8 7l1 12h6l1-12M10 11v5M14 11v5"/></svg>
+            </button>`}
+        <input class="select" data-action="select" type="checkbox" ${state.selection.has(note.id) ? "checked" : ""} aria-label="Zaznacz" />
       </div>
     `;
 
@@ -568,9 +544,8 @@ function renderSelectAll(notes) {
   const allSelected = notes.length > 0 && notes.every((note) => state.selection.has(note.id));
   const anySelected = state.selection.size > 0;
   els.selectAllRow.innerHTML = `
-    <input type="checkbox" id="select-all" ${allSelected ? "checked" : ""} />
-    <label for="select-all">Zaznacz wszystkie</label>
-    <span>${anySelected ? `Zaznaczono: ${state.selection.size}` : ""}</span>
+    <span class="select-count">${anySelected ? `Zaznaczono: ${state.selection.size}` : ""}</span>
+    <input type="checkbox" id="select-all" ${allSelected ? "checked" : ""} aria-label="Zaznacz wszystkie" />
   `;
   const checkbox = els.selectAllRow.querySelector("#select-all");
   checkbox.addEventListener("change", () => {
@@ -731,7 +706,9 @@ function handleNoteChange(e) {
 }
 
 function getVisibleNotes() {
-  let items = state.notes.filter((note) => note.owner === state.selectedOwner);
+  let items = state.selectedOwner === "all"
+    ? state.notes.filter((note) => state.allowedOwners.includes(note.owner))
+    : state.notes.filter((note) => note.owner === state.selectedOwner);
   if (state.selectedTab === "active") {
     items = items.filter((n) => !n.isDone && !n.isDeleted);
   } else if (state.selectedTab === "done") {
@@ -745,32 +722,10 @@ function getVisibleNotes() {
     items = items.filter((n) => n.text.toLowerCase().includes(q));
   }
 
-  items = applyFilter(items);
   return sortNotes(items);
 }
 
 function applyFilter(items) {
-  const today = startOfDay(new Date());
-  if (state.filter === "today") {
-    return items.filter((n) => n.dueDate && isSameDay(new Date(n.dueDate), today));
-  }
-  if (state.filter === "week") {
-    const end = new Date(today);
-    end.setDate(end.getDate() + 7);
-    return items.filter((n) => n.dueDate && new Date(n.dueDate) >= today && new Date(n.dueDate) < end);
-  }
-  if (state.filter === "month") {
-    const [year, month] = state.filterMonth.split("-").map(Number);
-    return items.filter((n) => {
-      if (!n.dueDate) return false;
-      const d = new Date(n.dueDate);
-      return d.getFullYear() === year && d.getMonth() === month - 1;
-    });
-  }
-  if (state.filter === "date") {
-    const selected = new Date(state.filterDate);
-    return items.filter((n) => n.dueDate && isSameDay(new Date(n.dueDate), selected));
-  }
   return items;
 }
 
@@ -862,6 +817,7 @@ function renderCalendar(container, isModal) {
     cell.className = "calendar-cell day" + (isSelected ? " selected" : "") + (isToday ? " today" : "");
     cell.textContent = day;
     cell.onclick = () => {
+      state.filterDate = toDateInput(date);
       const prefix = formatShortDatePrefix(date);
       const current = els.newNote.value.trim();
       els.newNote.value = current ? `${prefix} ${stripDatePrefix(current)}` : `${prefix} `;
@@ -971,6 +927,22 @@ function stripDatePrefix(text) {
   return text.replace(/^\s*\d{1,2}\.\d{1,2}(?:\.\d{4})?\.?\s*/, "").trim();
 }
 
+function downloadBackup() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    notes: state.notes
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `pestapp-backup-${todayISO()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function toDateInput(isoOrDate) {
   const d = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
   return d.toISOString().slice(0, 10);
@@ -1027,15 +999,16 @@ function uid() {
 }
 
 function accessBootstrap(email) {
+  const allOwnerIds = owners.filter((owner) => owner.id !== "all").map((owner) => owner.id);
   switch ((email || "").trim().toLowerCase()) {
     case "ujczak.s@gmail.com":
-      return owners.map((owner) => owner.id);
+      return allOwnerIds;
     case "michalik.gregory@gmail.com":
       return ["greg"];
     case "michalik.zddid@gmail.com":
       return ["michal"];
     default:
-      return owners.map((owner) => owner.id);
+      return allOwnerIds;
   }
 }
 
