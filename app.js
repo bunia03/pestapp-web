@@ -78,14 +78,14 @@ const els = {
   resetPassword: document.getElementById("reset-password"),
   signOut: document.getElementById("sign-out"),
   authStatus: document.getElementById("auth-status"),
-  noteDialog: document.getElementById("note-dialog"),
-  closeNoteDialog: document.getElementById("close-note-dialog"),
-  noteDialogText: document.getElementById("note-dialog-text"),
-  noteDialogDate: document.getElementById("note-dialog-date"),
-  noteDialogUrgent: document.getElementById("note-dialog-urgent"),
-  noteDialogDone: document.getElementById("note-dialog-done"),
-  noteDialogClearDate: document.getElementById("note-dialog-clear-date"),
-  noteDialogSave: document.getElementById("note-dialog-save")
+  editRow: document.getElementById("edit-row"),
+  editNoteText: document.getElementById("edit-note-text"),
+  editNoteDate: document.getElementById("edit-note-date"),
+  editNoteUrgent: document.getElementById("edit-note-urgent"),
+  editNoteDone: document.getElementById("edit-note-done"),
+  editNoteClearDate: document.getElementById("edit-note-clear-date"),
+  editNoteSave: document.getElementById("edit-note-save"),
+  editNoteCancel: document.getElementById("edit-note-cancel")
 };
 
 init();
@@ -143,11 +143,11 @@ function bindEvents() {
   });
   els.closeCalendar.addEventListener("click", () => els.calendarDialog.close());
 
-  els.closeNoteDialog.addEventListener("click", closeNoteDialog);
-  els.noteDialogClearDate.addEventListener("click", () => {
-    els.noteDialogDate.value = "";
+  els.editNoteClearDate.addEventListener("click", () => {
+    els.editNoteDate.value = "";
   });
-  els.noteDialogSave.addEventListener("click", saveNoteDialog);
+  els.editNoteSave.addEventListener("click", saveInlineEditor);
+  els.editNoteCancel.addEventListener("click", closeInlineEditor);
   els.refreshData.addEventListener("click", async () => {
     if (state.user) {
       await subscribeNotes();
@@ -453,6 +453,7 @@ function render() {
   renderOwners();
   renderTabs();
   renderFilters();
+  renderInlineEditor();
   renderNotes();
   renderCalendar(els.calendarPanel, false);
   renderCalendar(els.calendarModalBody, true);
@@ -655,7 +656,7 @@ function handleNoteClick(e) {
   }
 
   if (action === "edit-note") {
-    openNoteDialog(note);
+    openInlineEditor(note);
   }
 
   if (action === "toggle-urgent") {
@@ -821,6 +822,9 @@ function renderCalendar(container, isModal) {
       const prefix = formatShortDatePrefix(date);
       const current = els.newNote.value.trim();
       els.newNote.value = current ? `${prefix} ${stripDatePrefix(current)}` : `${prefix} `;
+      if (state.editingNoteId) {
+        els.editNoteDate.value = toDateInput(date);
+      }
       state.calendarMonth = startOfMonth(date);
       if (isModal) els.calendarDialog.close();
       els.newNote.focus();
@@ -831,41 +835,45 @@ function renderCalendar(container, isModal) {
   container.append(header, grid);
 }
 
-function openNoteDialog(note) {
+function openInlineEditor(note) {
   state.editingNoteId = note.id;
-  els.noteDialogText.value = note.text || "";
-  els.noteDialogDate.value = note.dueDate ? toDateInput(note.dueDate) : "";
-  els.noteDialogUrgent.checked = !!note.isUrgent;
-  els.noteDialogDone.checked = !!note.isDone;
-  if (typeof els.noteDialog.showModal === "function") {
-    els.noteDialog.showModal();
-  }
+  els.editNoteText.value = note.text || "";
+  els.editNoteDate.value = note.dueDate ? toDateInput(note.dueDate) : "";
+  els.editNoteUrgent.checked = !!note.isUrgent;
+  els.editNoteDone.checked = !!note.isDone;
+  renderInlineEditor();
+  setTimeout(() => els.editNoteText.focus(), 0);
 }
 
-function closeNoteDialog() {
+function closeInlineEditor() {
   state.editingNoteId = null;
-  els.noteDialog.close();
+  renderInlineEditor();
 }
 
-function saveNoteDialog() {
+function renderInlineEditor() {
+  const note = state.notes.find((item) => item.id === state.editingNoteId);
+  els.editRow.classList.toggle("hidden", !note);
+}
+
+function saveInlineEditor() {
   const note = state.notes.find((item) => item.id === state.editingNoteId);
   if (!note) return;
 
-  const raw = els.noteDialogText.value.trim();
+  const raw = els.editNoteText.value.trim();
   if (!raw) return;
 
   const parsed = parseInput(raw);
   note.text = parsed.text;
-  note.isUrgent = els.noteDialogUrgent.checked || parsed.isUrgent;
-  note.isDone = els.noteDialogDone.checked;
-  note.dueDate = els.noteDialogDate.value ? new Date(els.noteDialogDate.value).toISOString() : null;
-  if (parsed.dueDate && !els.noteDialogDate.value) {
+  note.isUrgent = els.editNoteUrgent.checked || parsed.isUrgent;
+  note.isDone = els.editNoteDone.checked;
+  note.dueDate = els.editNoteDate.value ? new Date(els.editNoteDate.value).toISOString() : null;
+  if (parsed.dueDate && !els.editNoteDate.value) {
     note.dueDate = parsed.dueDate;
   }
   note.updatedAt = new Date().toISOString();
   queueNoteSync(note);
   saveState();
-  closeNoteDialog();
+  closeInlineEditor();
   render();
 }
 

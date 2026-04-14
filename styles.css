@@ -43,9 +43,25 @@ body {
 .utility-row {
   display: flex;
   width: 100%;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.utility-left,
+.utility-right {
+  display: flex;
+  align-items: center;
+}
+
+.utility-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.utility-right {
   justify-content: flex-end;
   gap: 10px;
-  align-items: center;
 }
 
 .icon-button {
@@ -201,12 +217,15 @@ button.ghost {
   flex-direction: column;
 }
 
+.top-tabs {
+  justify-content: flex-start;
+}
+
 .input-row {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-  order: 2;
-  margin-top: 14px;
+  align-items: center;
 }
 
 .input-row input {
@@ -214,6 +233,34 @@ button.ghost {
   background: linear-gradient(135deg, rgba(107,199,165,0.18), rgba(155,139,255,0.14));
   border-color: rgba(107,199,165,0.55);
   box-shadow: 0 0 0 1px rgba(107,199,165,0.12), 0 10px 24px rgba(0,0,0,0.18);
+}
+
+.edit-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(17,24,37,0.92);
+  border: 1px solid rgba(107,199,165,0.26);
+}
+
+.edit-row.hidden {
+  display: none;
+}
+
+.edit-row input[type="text"] {
+  flex: 1 1 240px;
+}
+
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .tab-row {
@@ -289,19 +336,21 @@ button.ghost {
 }
 
 .note .done-toggle {
-  background: transparent;
-  border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(107,199,165,0.18), rgba(155,139,255,0.14));
+  border: 1px solid rgba(107,199,165,0.45);
   border-radius: 999px;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
-  font-size: 14px;
+  font-size: 15px;
+  color: var(--good);
   padding: 0;
+  box-shadow: 0 0 0 1px rgba(107,199,165,0.12), 0 8px 18px rgba(0,0,0,0.18);
 }
 
 .note .done-toggle.done {
-  background: var(--accent);
+  background: linear-gradient(135deg, rgba(107,199,165,1), rgba(107,199,165,0.78));
   color: #0b0f16;
   border-color: transparent;
 }
@@ -445,51 +494,6 @@ button.ghost {
   padding: 12px 14px 0;
 }
 
-.note-dialog {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  color: var(--text);
-  width: min(420px, 92vw);
-}
-
-.note-dialog::backdrop {
-  background: rgba(0,0,0,0.6);
-}
-
-.note-dialog-body {
-  padding: 12px 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.note-dialog-body textarea {
-  width: 100%;
-  min-height: 120px;
-  resize: vertical;
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 12px;
-  padding: 12px;
-  font: inherit;
-}
-
-.note-dialog-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.dialog-checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-}
-
 .signed-in .auth-bar {
   display: none;
 }
@@ -521,5 +525,17 @@ button.ghost {
   .note {
     grid-template-columns: auto 1fr auto;
     gap: 8px;
+  }
+  .utility-row {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .utility-left,
+  .utility-right {
+    width: 100%;
+    justify-content: center;
+  }
+  .top-tabs {
+    justify-content: center;
   }
 }
