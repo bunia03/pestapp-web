@@ -444,6 +444,9 @@ function addFromInput() {
   };
 
   state.notes.unshift(note);
+  if (state.selectedOwner === "all") {
+    state.selectedOwner = owner;
+  }
   els.newNote.value = "";
   queueNoteSync(note);
   saveState();
