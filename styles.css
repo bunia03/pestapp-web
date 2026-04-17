@@ -370,6 +370,14 @@ button.ghost {
 
 .note-actions {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+.note-action-icons {
+  display: flex;
   gap: 6px;
   align-items: center;
   justify-content: flex-end;
@@ -412,6 +420,18 @@ button.ghost {
   width: 18px;
   height: 18px;
   accent-color: var(--accent);
+}
+
+.owner-switch {
+  min-width: 112px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 159, 103, 0.45);
+  background: rgba(255, 159, 103, 0.16);
+  color: #ffb083;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
 }
 
 .note.urgent .note-text {

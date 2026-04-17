@@ -408,22 +408,25 @@ function queueNoteSync(note) {
   pushNoteRemote(note).catch((err) => console.error(err));
 }
 
-async function deleteNoteRemote(noteId) {
+async function deleteNoteRemote(noteId, ownerOverride = null) {
   if (!state.user) return;
   const note = state.notes.find((item) => item.id === noteId);
-  if (!note) return;
-  const ref = db.collection("spaces").doc(note.owner).collection("notes").doc(noteId);
+  const owner = ownerOverride || note?.owner;
+  if (!owner) return;
+  const ref = db.collection("spaces").doc(owner).collection("notes").doc(noteId);
   await ref.delete();
 }
 
-function queueDeleteSync(noteId) {
+function queueDeleteSync(noteId, ownerOverride = null) {
   if (!state.user) return;
-  deleteNoteRemote(noteId).catch((err) => console.error(err));
+  deleteNoteRemote(noteId, ownerOverride).catch((err) => console.error(err));
 }
 
 function addFromInput() {
   const raw = els.newNote.value.trim();
   if (!raw) return;
+  const owner = defaultOwnerForNewNote();
+  if (!owner) return;
 
   const parsed = parseInput(raw);
   const now = new Date().toISOString();
@@ -437,7 +440,7 @@ function addFromInput() {
     isDone: false,
     isDeleted: false,
     deletedAt: null,
-    owner: state.selectedOwner
+    owner
   };
 
   state.notes.unshift(note);
@@ -525,15 +528,22 @@ function renderNotes() {
         <div class="note-text">${escapeHtml(note.text)}</div>
       </div>
       <div class="note-actions">
-        <button class="urgent ${note.isUrgent ? "active" : ""}" data-action="toggle-urgent" type="button" aria-label="Pilne">!</button>
-        ${state.selectedTab === "trash"
-          ? `<button class="trash" data-action="delete-forever" type="button" aria-label="Usuń na zawsze">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M8 7l1 12h6l1-12M10 11v5M14 11v5"/></svg>
-            </button>`
-          : `<button class="trash" data-action="trash" type="button" aria-label="Kosz">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M8 7l1 12h6l1-12M10 11v5M14 11v5"/></svg>
-            </button>`}
-        <input class="select" data-action="select" type="checkbox" ${state.selection.has(note.id) ? "checked" : ""} aria-label="Zaznacz" />
+        <div class="note-action-icons">
+          <button class="urgent ${note.isUrgent ? "active" : ""}" data-action="toggle-urgent" type="button" aria-label="Pilne">!</button>
+          ${state.selectedTab === "trash"
+            ? `<button class="trash" data-action="delete-forever" type="button" aria-label="Usuń na zawsze">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M8 7l1 12h6l1-12M10 11v5M14 11v5"/></svg>
+              </button>`
+            : `<button class="trash" data-action="trash" type="button" aria-label="Kosz">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M8 7l1 12h6l1-12M10 11v5M14 11v5"/></svg>
+              </button>`}
+          <input class="select" data-action="select" type="checkbox" ${state.selection.has(note.id) ? "checked" : ""} aria-label="Zaznacz" />
+        </div>
+        <select class="owner-switch" data-action="move-owner" aria-label="Przenies folder">
+          ${movableOwnersForNote(note).map((owner) => `
+            <option value="${owner.id}" ${owner.id === note.owner ? "selected" : ""}>${escapeHtml(owner.label)}</option>
+          `).join("")}
+        </select>
       </div>
     `;
 
@@ -701,6 +711,19 @@ function handleNoteChange(e) {
     } else {
       state.selection.delete(id);
     }
+    render();
+  }
+
+  if (action === "move-owner") {
+    const nextOwner = e.target.value;
+    if (!nextOwner || nextOwner === note.owner) return;
+    const previousOwner = note.owner;
+    note.owner = nextOwner;
+    note.updatedAt = new Date().toISOString();
+    queueDeleteSync(id, previousOwner);
+    queueNoteSync(note);
+    clearSelection();
+    saveState();
     render();
   }
 
@@ -966,6 +989,18 @@ function monthISO(date) {
 
 function clearSelection() {
   state.selection.clear();
+}
+
+function defaultOwnerForNewNote() {
+  if (state.selectedOwner !== "all") return state.selectedOwner;
+  return state.allowedOwners[0] || "bunia";
+}
+
+function movableOwnersForNote(note) {
+  const allowed = owners.filter((owner) => owner.id !== "all" && state.allowedOwners.includes(owner.id));
+  const current = allowed.find((owner) => owner.id === note.owner);
+  if (current) return allowed;
+  return [{ id: note.owner, label: note.owner }, ...allowed];
 }
 
 function escapeHtml(str) {
