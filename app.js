@@ -192,6 +192,7 @@ function bindAuth() {
       try {
         await loadAccessProfile();
         await subscribeNotes();
+        await flushLocalNotesToRemote();
       } catch (err) {
         console.error(err);
         alert("Nie udało się uruchomić synchronizacji. Spróbuj ponownie.");
@@ -229,9 +230,7 @@ function loadState() {
 }
 
 function saveState() {
-  if (!state.user) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.notes));
-  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.notes));
   const prefs = {
     selectedOwner: state.selectedOwner,
     selectedTab: state.selectedTab,
@@ -404,8 +403,24 @@ async function pushNoteRemote(note) {
 }
 
 function queueNoteSync(note) {
+  note.syncPending = true;
+  note.syncError = false;
+  saveState();
   if (!state.user) return;
-  pushNoteRemote(note).catch((err) => console.error(err));
+  pushNoteRemote(note)
+    .then(() => {
+      note.syncPending = false;
+      note.syncError = false;
+      saveState();
+      render();
+    })
+    .catch((err) => {
+      console.error(err);
+      note.syncPending = true;
+      note.syncError = true;
+      saveState();
+      render();
+    });
 }
 
 async function deleteNoteRemote(noteId, ownerOverride = null) {
@@ -420,6 +435,27 @@ async function deleteNoteRemote(noteId, ownerOverride = null) {
 function queueDeleteSync(noteId, ownerOverride = null) {
   if (!state.user) return;
   deleteNoteRemote(noteId, ownerOverride).catch((err) => console.error(err));
+}
+
+async function flushLocalNotesToRemote() {
+  if (!state.user) return;
+  const localAllowed = state.notes.filter((note) => state.allowedOwners.includes(note.owner));
+  if (!localAllowed.length) return;
+  await Promise.allSettled(
+    localAllowed.map(async (note) => {
+      try {
+        await pushNoteRemote(note);
+        note.syncPending = false;
+        note.syncError = false;
+      } catch (err) {
+        console.error(err);
+        note.syncPending = true;
+        note.syncError = true;
+      }
+    })
+  );
+  saveState();
+  render();
 }
 
 function addFromInput() {
